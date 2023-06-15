@@ -347,6 +347,7 @@ ISR(USART0_RX_vect)
 
 int main()
 {
+    init();
 	sei(); // 전역 인터럽트 허용
 	while(1)
 	{
