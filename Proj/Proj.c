@@ -6,6 +6,7 @@
 #define WAIT_TIME 5000
 #define DISTANCE_PER_FLOOR 1000;
 #define QUEUE_SIZE 20;
+#define MAX_HEIGHT 10;
 static unsigned int queue[QUEUE_SIZE];
 static unsigned int left, right; // 큐의 좌/우측에 넣을 값들
 static unsigned int velocity, acceleration=10; // 속도 / 가속도
@@ -32,6 +33,8 @@ const unsigned char seven_seg_digits_decode_gfedcba[75]= {
 };
 unsigned char fnd_sel[4] = {0x01, 0x02, 0x04, 0x08};
 unsigned char fnd[4];
+unsigned char digits2[2];
+unsigned int char digits_idx=0;
 // 1. LED setting
 void LED setting()
 {
@@ -53,8 +56,11 @@ void init_7seg()
     DDRG = 0x0F;
 }
 
+// idx : 위치  c : 숫자(only 한 자리)
 void set_7seg_num(unsigned int idx, unsigned int digit)
 {
+    // 한 자리 이상이 들어오는 경우 예외 처리
+    if(digit >= 10)return;
     PORTC = fnd_sel[idx];
     PORTG = seven_seg_digits_decode_gfedcba[digit];
 }
@@ -239,32 +245,90 @@ ISR(TIMER2_COMP_vect)
 // 블루투스 입력
 ISR(USART0_RX_vect)
 {
+    unsigned int value = 0;
     cli();
     switch(gettingnumber())
     {
         case 0:
+        digits2[digits_idx++] = 0;
         break;
         case 1:
+        digits2[digits_idx++] = 1;    
         break;
         case 2:
+        digits2[digits_idx++] = 2;
         break;
         case 3:
+        digits2[digits_idx++] = 3;
         break;
         case 4:
+        digits2[digits_idx++] = 4;
         break;
         case 5:
+        digits2[digits_idx++] = 5;
         break;
         case 6:
+        digits2[digits_idx++] = 6;
         break;
         case 7:
+        digits2[digits_idx++] = 7;
         break;
         case 8:
+        digits2[digits_idx++] = 8;
         break;
         case 9:
+        digits2[digits_idx++] = 9;
         break;
         default:
+        // value = (digits_idx == 0)?digits[0] : digits[0] * 10 + digits[1];
+        // digits_idx = 0;
         break;
     }
+    // 고정된 길이의 2 값을 받기 위한 사용 
+    if(digits_idx == 2)
+    {
+        value = digits[0] * 10 + digits[1];
+        digits_idx = 0;
+
+        if(value > 0 && value < MAX_HEIGHT)
+        {
+            if((right + 1)%QUEUE_SIZE != left)
+            {
+                current_floor[(right+1)%QUEUE_SIZE] = value;
+                set_7seg_char(3, 'N');
+                set_7seg_char(2, '=');
+                set_7seg_int(1, value/10);
+                set_7seg_int(0, value%10);
+            }
+            else // 배열이 꽉 차서 값이 못 들어간다
+            {
+                set_7seg_char(3, 'F');
+                set_7seg_char(2, 'U');
+                set_7seg_char(1, 'L');
+                set_7seg_char(0, 'L');
+            }
+        }
+    }
+    // 숫자 말고 다른 문자열을 넣을 수 있는 경우의 if문
+    // 고정된 입력이 아니어도 입력을 받을 수 있다. 
+    // if(value > 0 && value < MAX_HEIGHT)
+    // {
+    //     if((right + 1)%QUEUE_SIZE != left)
+    //     {
+    //         current_floor[(right+1)%QUEUE_SIZE] = value;
+    //         set_7seg_char(3, 'N');
+    //         set_7seg_char(2, '=');
+    //         set_7seg_int(1, value/10);
+    //         set_7seg_int(0, value%10);
+    //     }
+    //     else // 배열이 꽉 차서 값이 못 들어간다
+    //     {
+    //         set_7seg_char(3, 'F');
+    //         set_7seg_char(2, 'U');
+    //         set_7seg_char(1, 'L');
+    //         set_7seg_char(0, 'L');
+    //     }
+    // }
 }
 
 int main()
@@ -273,6 +337,7 @@ int main()
     while(1)
     {
         // 조도 센서를 통한 LED 제어
+        set_ADCLED();
         OCR2 = duty;
     }
     return 0;
@@ -302,4 +367,30 @@ void putchar0(short n)
 {
     while(!(UCSR0A & 0x20));
     UDR0 = n; // 1 char 전달
+}
+
+unsigned short read_adc()
+{
+   unsigned char adc_low, adc_high;
+   unsigned short value;
+   ADCSRA |= 0x40;      //ADC start conversion, ADSC = '1'
+   while((ADCSRA&0x10)!=0x10);//ADC 변환 완료 검사
+   adc_low = ADCL;      // 변환된 Low값 읽어오기
+   adc_high = ADCH;   // 변환된 High값 읽어오기
+   value = (adc_high << 8)|adc_low;
+   // value는 High 및 Low 연결 16비트값
+   return value;
+}
+
+void set_ADCLED()
+{
+    if(value > 1000)PORTA = 0x00;
+    else if(value > 875)PORTA = 0x01;
+    else if(value > 750)PORTA = 0x03;
+    else if(value > 625)PORTA = 0x07;
+    else if(value > 500)PORTA = 0x0F;
+    else if(value > 375)PORTA = 0x1F;
+    else if(value > 250)PORTA = 0x3F;
+    else if(value > 125)PORTA = 0x7F;
+    else PORTA = 0xFF;
 }
