@@ -5,9 +5,9 @@
 #define F_CPU 16000000UL // CPU 시간
 #define DELAY_TIME 20 // DELAY 시간
 #define WAIT_TIME 5000 // 문을 닫는데 기다리는 시간
-#define DISTANCE_PER_FLOOR 1000; // 실제 이동해야 하는 거리
-#define QUEUE_SIZE 20; // queue size
-#define MAX_HEIGHT 10; // 엘리베이터의 높이
+#define DISTANCE_PER_FLOOR 1000 // 실제 이동해야 하는 거리
+#define QUEUE_SIZE 20 // queue size
+#define MAX_HEIGHT 10 // 엘리베이터의 높이
 static unsigned int queue[QUEUE_SIZE]; //  
 static unsigned int left, right; // 큐의 좌/우측에 넣을 값들
 static unsigned int velocity, acceleration=10; // 속도 / 가속도
