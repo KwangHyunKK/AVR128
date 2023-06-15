@@ -111,6 +111,12 @@ void init_PWM()
     // OCR2 = duty;
 }
 
+// 7. MOTOR setting => 
+void init_MOTOR()
+{
+    DDRB = 0x0A;
+}
+
 void init()
 {
     init_7seg();
