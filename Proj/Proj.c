@@ -20,6 +20,9 @@ static unsigned int duty = 0; // duty 값
 
 void set_ADCLED();
 void msec_delay();
+unsigned short read_adc();
+char check_duplication(unsigned int value);
+
 
 const unsigned char seven_seg_digits_decode_gfedcba[75]= {
 /*  0     1     2     3     4     5     6     7     8     9     :     ;     */
@@ -119,15 +122,33 @@ void init()
 }
 
 // 사용 함수 정의
-unsigned char check_duplication()
+char check_duplication(unsigned int value)
 {
     if(left == right)return 0;
     else
     {
-        
+        for(int i=left;i!=right;(i + 1)%QUEUE_SIZE)
+        {
+            if(value == queue[i])return i;
+        }
+    }
+    return -1;
+}
+
+// 변경
+void cancel_floor(int idx)
+{
+    if(idx<0)return;
+    // 바로 다음인 경우에는 다음의 값으로 선택될 수 있기 때문에 바로 취소할 수 없다.
+    // 거리가 2 이상인 경우에 취소가 가능
+    if(idx != (left + 1)%QUEUE_SIZE)
+    {
+        if(idx == right)--right;
+        else{
+            for(int j=idx;j!=right;(j+1)%QUEUE_SIZE)queue[j] = queue[(j+1)%QUEUE_SIZE];
+        }
     }
 }
-unsigned short read_adc();
 
 
 // 인터럽트
@@ -322,19 +343,29 @@ ISR(USART0_RX_vect)
 		{
 			if((right + 1)%QUEUE_SIZE != left)
 			{
-				unsigned int i = (right + 1)%QUEUE_SIZE;
-				queue[i] = value;
-				set_7seg_char(3, 'N');
-				set_7seg_char(2, '=');
-				set_7seg_num(1, value/10);
-				set_7seg_num(0, value%10);
+                int c = check_duplication(value);
+                if(c>=0)cancel_floor(c);
+                else
+                {
+                    unsigned int i = (right + 1)%QUEUE_SIZE;
+                    queue[i] = value;
+                    set_7seg_char(3, 'N');
+                    set_7seg_char(2, '=');
+                    set_7seg_num(1, value/10);
+                    set_7seg_num(0, value%10);
+                }
 			}
 			else // 배열이 꽉 차서 값이 못 들어간다
 			{
-				set_7seg_char(3, 'F');
-				set_7seg_char(2, 'U');
-				set_7seg_char(1, 'L');
-				set_7seg_char(0, 'L');
+                int c = check_duplication(value);
+                if(c>=0)cancel_floor(c);
+                else
+                {
+                    set_7seg_char(3, 'F');
+                    set_7seg_char(2, 'U');
+                    set_7seg_char(1, 'L');
+                    set_7seg_char(0, 'L');
+                }
 			}
 		}
 	}
