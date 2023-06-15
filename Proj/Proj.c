@@ -2,18 +2,19 @@
 #include <util/delay.h>
 #include <avr/interrupt.h>
 
-#define DELAY_TIME 20
-#define WAIT_TIME 5000
-#define DISTANCE_PER_FLOOR 1000
-#define QUEUE_SIZE 20
-#define MAX_HEIGHT 10
-static unsigned int queue[QUEUE_SIZE];
+#define F_CPU 16000000UL // CPU 시간
+#define DELAY_TIME 20 // DELAY 시간
+#define WAIT_TIME 5000 // 문을 닫는데 기다리는 시간
+#define DISTANCE_PER_FLOOR 1000; // 실제 이동해야 하는 거리
+#define QUEUE_SIZE 20; // queue size
+#define MAX_HEIGHT 10; // 엘리베이터의 높이
+static unsigned int queue[QUEUE_SIZE]; //  
 static unsigned int left, right; // 큐의 좌/우측에 넣을 값들
 static unsigned int velocity, acceleration=10; // 속도 / 가속도
 static unsigned int current_floor, diff_floor, object_floor; // 목표 층과 현재 층
 static unsigned char is_open, is_move, is_up, has_open; // 움직일 수 있는지, 문을 열 수 있는지 check
 static unsigned long times1, times2; // 시간 check
-static unsigned int duty = 0;
+static unsigned int duty = 0; // duty 값 
 
 // 함수 정의
 
@@ -21,27 +22,28 @@ void set_ADCLED();
 void msec_delay();
 
 const unsigned char seven_seg_digits_decode_gfedcba[75]= {
-	/*  0     1     2     3     4     5     6     7     8     9     :     ;     */
-	0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F, 0x00, 0x00,
-	/*  <     =     >     ?     @     A     B     C     D     E     F     G     */
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x77, 0x7C, 0x39, 0x5E, 0x79, 0x71, 0x3D,
-	/*  H     I     J     K     L     M     N     O     P     Q     R     S     */
-	0x76, 0x30, 0x1E, 0x75, 0x38, 0x55, 0x54, 0x5C, 0x73, 0x67, 0x50, 0x6D,
-	/*  T     U     V     W     X     Y     Z     [     \     ]     ^     _     */
-	0x78, 0x3E, 0x1C, 0x1D, 0x64, 0x6E, 0x5B, 0x00, 0x00, 0x00, 0x00, 0x00,
-	/*  `     a     b     c     d     e     f     g     h     i     j     k     */
-	0x00, 0x77, 0x7C, 0x39, 0x5E, 0x79, 0x71, 0x3D, 0x76, 0x30, 0x1E, 0x75,
-	/*  l     m     n     o     p     q     r     s     t     u     v     w     */
-	0x38, 0x55, 0x54, 0x5C, 0x73, 0x67, 0x50, 0x6D, 0x78, 0x3E, 0x1C, 0x1D,
-	/*  x     y     z     */
-	0x64, 0x6E, 0x5B
-};
-unsigned char fnd_sel[4] = {0x01, 0x02, 0x04, 0x08};
-unsigned char fnd[4];
-unsigned char digits2[2];
-unsigned char digits_idx=0;
+/*  0     1     2     3     4     5     6     7     8     9     :     ;     */
+    0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F, 0x00, 0x00, 
+/*  <     =     >     ?     @     A     B     C     D     E     F     G     */
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x77, 0x7C, 0x39, 0x5E, 0x79, 0x71, 0x3D, 
+/*  H     I     J     K     L     M     N     O     P     Q     R     S     */
+    0x76, 0x30, 0x1E, 0x75, 0x38, 0x55, 0x54, 0x5C, 0x73, 0x67, 0x50, 0x6D, 
+/*  T     U     V     W     X     Y     Z     [     \     ]     ^     _     */
+    0x78, 0x3E, 0x1C, 0x1D, 0x64, 0x6E, 0x5B, 0x00, 0x00, 0x00, 0x00, 0x00, 
+/*  `     a     b     c     d     e     f     g     h     i     j     k     */
+    0x00, 0x77, 0x7C, 0x39, 0x5E, 0x79, 0x71, 0x3D, 0x76, 0x30, 0x1E, 0x75, 
+/*  l     m     n     o     p     q     r     s     t     u     v     w     */
+    0x38, 0x55, 0x54, 0x5C, 0x73, 0x67, 0x50, 0x6D, 0x78, 0x3E, 0x1C, 0x1D, 
+/*  x     y     z     */
+    0x64, 0x6E, 0x5B
+}; // 7-segment ascii 코드와 대응하는 배열 
+unsigned char fnd_sel[4] = {0x01, 0x02, 0x04, 0x08}; // 7-segment selection 
+unsigned char fnd[4]; //
+unsigned char digits2[2]; // 값을 받아서 저장할 값  
+unsigned int char digits_idx=0;
+
 // 1. LED setting
-void LED_setting()
+void init_LED()
 {
 	PORTA = 0xFF; // A 포트 출력
 }
@@ -83,28 +85,27 @@ unsigned char gettingnumber(); // 1 char 수신
 
 void init_bluetooth()
 {
-	UBRR0H = 0;
-	UBRR0L = 0;
-	UCSR0B = 0x18;
-	UCSR0C = 0x06;
+    UBRR0H = 0;
+    UBRR0L = 0;
+    UCSR0B = 0x18; // 0b 0001 1000 : USART Empty interrupt, RXENn 
+    UCSR0C = 0x06; // 0b 0000 0110 : 8bit 
 }
 
 // 5. ADC setting
 void init_ADC()
 {
-	ADMUX = 0x00;
-	ADCSRA = 0x87;
+    ADMUX = 0x00;
+    ADCSRA = 0x87; // 0b 1000 0111 : ADEN, 128 division factor
 }
-
-unsigned short read_adc();
 
 // 6. PWM setting => Fast PWM 사용
 void init_PWM()
 {
-	TIMSK = 0x40; // TOV 인터럽트에서 사용 : CLOCK
-	TCCR2 = (1 << WGM01) | (1 << WGM00) | (2 << COM00); // Fast PWM 모드, 비교 일치 떄 동작모드
-	TCCR2 |= (3 << CS00); // 분주비 8 설정 (2) // 3 => 64로 설정
-	OCR2 = duty;
+    TIMSK = 0x40; // TOV 인터럽트에서 사용 : CLOCK
+    TCCR2 = (1 << WGM01) | (1 << WGM00) | (2 << COM00); // Fast PWM 모드, 비교 일치 떄 동작모드
+    TCRR2 |= (3 << CS00); // 분주비 8 설정 (2) // 3 => 64로 설정
+    OCR2 = 0;
+    // OCR2 = duty;
 }
 
 void init()
@@ -113,8 +114,22 @@ void init()
     init_ADC();
     init_bluetooth();
     init_button();
-    init_PWM();
+    init_LED();
+    init_PWM(); 
 }
+
+// 사용 함수 정의
+unsigned char check_duplication()
+{
+    if(left == right)return 0;
+    else
+    {
+        
+    }
+}
+unsigned short read_adc();
+
+
 // 인터럽트
 ISR(INT4_vect)
 {
@@ -347,15 +362,15 @@ ISR(USART0_RX_vect)
 
 int main()
 {
-    init();
-	sei(); // 전역 인터럽트 허용
-	while(1)
-	{
-		// 조도 센서를 통한 LED 제어
-		set_ADCLED();
-		OCR2 = duty;
-	}
-	return 0;
+    sei(); // 전역 인터럽트 허용
+    init(); // init_ 을 모은 함수
+    while(1)
+    {
+        // 조도 센서를 통한 LED 제어
+        set_ADCLED();
+        OCR2 = duty;
+    }
+    return 0;
 }
 
 void msec_delay(int msec)
@@ -397,14 +412,14 @@ unsigned short read_adc()
 
 void set_ADCLED()
 {
-	unsigned short value = read_adc();
-	if(value > 1000)PORTA = 0x00;
-	else if(value > 875)PORTA = 0x01;
-	else if(value > 750)PORTA = 0x03;
-	else if(value > 625)PORTA = 0x07;
-	else if(value > 500)PORTA = 0x0F;
-	else if(value > 375)PORTA = 0x1F;
-	else if(value > 250)PORTA = 0x3F;
-	else if(value > 125)PORTA = 0x7F;
-	else PORTA = 0xFF;
+    unsigned short value = read_adc();
+    if(value > 1000)PORTA = 0x00;
+    else if(value > 875)PORTA = 0x01;
+    else if(value > 750)PORTA = 0x03;
+    else if(value > 625)PORTA = 0x07;
+    else if(value > 500)PORTA = 0x0F;
+    else if(value > 375)PORTA = 0x1F;
+    else if(value > 250)PORTA = 0x3F;
+    else if(value > 125)PORTA = 0x7F;
+    else PORTA = 0xFF;
 }
