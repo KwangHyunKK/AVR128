@@ -42,8 +42,7 @@ const unsigned char seven_seg_digits_decode_gfedcba[75]= {
 }; // 7-segment ascii 코드와 대응하는 배열
 unsigned char fnd_sel[4] = {0x01, 0x02, 0x04, 0x08}; // 7-segment selection
 unsigned char fnd[4]; //
-unsigned char digits2[2]; // 값을 받아서 저장할 값
-unsigned char digits_idx=0;
+unsigned char digits1; // 값을 받아서 저장할 값
 
 // 1. LED setting
 void init_LED()
@@ -104,7 +103,7 @@ void init_ADC()
 // 6. PWM setting => Fast PWM 사용
 void init_PWM()
 {
-	TIMSK = 0x40; // TOV 인터럽트에서 사용 : CLOCK
+	// TIMSK = 0x40; // TOV 인터럽트에서 사용 : CLOCK
 	TCCR2 = (1 << WGM01) | (1 << WGM00) | (2 << COM00); // Fast PWM 모드, 비교 일치 떄 동작모드
 	TCCR2 |= (3 << CS00); // 분주비 8 설정 (2) // 3 => 64로 설정
 	OCR2 = 0;
@@ -119,6 +118,7 @@ void init_MOTOR()
 
 void init()
 {
+	has_open = 1;
 	init_7seg();
 	init_ADC();
 	init_bluetooth();
@@ -156,13 +156,14 @@ void cancel_floor(int idx)
 	}
 }
 
-
 // 인터럽트
 ISR(INT4_vect)
 {
+	if(is_move)return;
 	cli(); // 열리는 도중에는 인터럽트 불가능
 	// 열림 버튼
 	// 7-seg에 open이라고 적는다.
+	if(times2 > 0)++times2;
 	is_open = 1;
 	set_7seg_char(3, 'O');
 	set_7seg_char(2, 'P');
@@ -171,15 +172,19 @@ ISR(INT4_vect)
 	while(~PINE & 0x10); // 버튼 누르기 기다림
 	msec_delay(DELAY_TIME);
 	EIFR = (1 << 4);
-	sei();
 }
 
 ISR(INT5_vect)
 {
+	if(is_move)return;
 	// 닫힘 버튼 : 5초 후에 닫는다
 	// 7-seg에 close라고 적는다
 	sei(); // 열림 버튼이 열리면 다시 열어야 하니까 반응 가능
-	if(times2 < 5000)return;
+	if(times2 < 5000)
+	{
+		++times2;
+		return;
+	}
 	else{
 		is_open = 0;
 		set_7seg_char(3, 'C');
@@ -192,113 +197,6 @@ ISR(INT5_vect)
 	EIFR = (1 << 5);
 }
 
-// 가장 많이 사용될 함수
-ISR(TIMER2_COMP_vect)
-{
-	// 움직이는 상태
-	if(is_move)
-	{
-		cli();
-		// 층 변화에 따른 변화 check
-		if(is_up) // current_floor < object_floor // 정회전
-		{
-			PORTB = 0x80;
-			// 1층 이동
-			if(object_floor - current_floor > diff_floor/2)
-			{
-				current_floor += velocity;
-				velocity += 10;
-			}
-			else if(object_floor - current_floor== 0)
-			{
-				current_floor = object_floor;
-				velocity = 0;
-				is_move = 0;
-			}
-			else
-			{
-				current_floor += velocity;
-				if(velocity <= 10)velocity = 10;
-				velocity -= 10;
-				if(object_floor-current_floor < 100)
-				{
-					int floor = object_floor/DISTANCE_PER_FLOOR;
-					set_7seg_char(3, '=');
-					set_7seg_char(2, '>');
-					set_7seg_num(1, floor/10);
-					set_7seg_char(0, floor%10);
-				}
-			}
-		}else // object_floor > current_floor // 역회전
-		{
-			PORTB = 0x40;
-			// 1층 이동
-			if(current_floor - object_floor > diff_floor/2)
-			{
-				current_floor -= velocity;
-				velocity += 10;
-			}
-			else if(current_floor - object_floor == 0)
-			{
-				current_floor = object_floor;
-				velocity = 0;
-				is_move = 0;
-			}
-			else
-			{
-				current_floor -= velocity;
-				if(velocity <= 10)velocity = 10;
-				velocity -= 10;
-				if(current_floor-object_floor < 100)
-				{
-					int floor = object_floor/DISTANCE_PER_FLOOR;
-					set_7seg_char(3, '=');
-					set_7seg_char(2, '>');
-					set_7seg_num(1, floor/10);
-					set_7seg_char(0, floor%10);
-				}
-			}
-		}
-		OCR2 = velocity;
-	}
-	else // 멈춰있는 상태
-	{
-		PORTB = 0;
-		// is_open이 아니고 1초가 지나면 is_move
-		sei();
-
-		if(!has_open)
-		{
-			is_open = 1;
-			has_open = 0;
-			set_7seg_char(3, 'O');
-			set_7seg_char(2, 'P');
-			set_7seg_char(1, 'E');
-			set_7seg_char(0, 'N');
-		}
-		++times1;
-
-		if(!is_open)
-		{
-			// 다음 행선지를 정한다.
-			if(left != right)
-			{
-				object_floor = queue[left] * DISTANCE_PER_FLOOR;
-				left = (left + 1) % QUEUE_SIZE;
-				}else{
-				// 움직일 필요가 없다.
-				// 배열이 비어있다.
-			}
-			if(times2 < 1000)++times2;
-			else{
-				is_move = 1;
-				times2 = 0;
-			}
-		}
-	}
-	TIFR = 0x40; // 오버플로 플래그 지움
-}
-
 // 블루투스 입력
 ISR(USART0_RX_vect)
 {
@@ -307,96 +205,70 @@ ISR(USART0_RX_vect)
 	switch(gettingnumber())
 	{
 		case 0:
-		digits2[digits_idx++] = 0;
+		digits1 = 0;
 		break;
 		case 1:
-		digits2[digits_idx++] = 1;
+		digits1 = 1;
 		break;
 		case 2:
-		digits2[digits_idx++] = 2;
+		digits1 = 2;
 		break;
 		case 3:
-		digits2[digits_idx++] = 3;
+		digits1 = 3;
 		break;
 		case 4:
-		digits2[digits_idx++] = 4;
+		digits1 = 4;
 		break;
 		case 5:
-		digits2[digits_idx++] = 5;
+		digits1 = 5;
 		break;
 		case 6:
-		digits2[digits_idx++] = 6;
+		digits1 = 6;
 		break;
 		case 7:
-		digits2[digits_idx++] = 7;
+		digits1 = 7;
 		break;
 		case 8:
-		digits2[digits_idx++] = 8;
+		digits1 = 8;
 		break;
 		case 9:
-		digits2[digits_idx++] = 9;
+		digits1 = 9;
 		break;
 		default:
 		// value = (digits_idx == 0)?digits[0] : digits[0] * 10 + digits[1];
 		// digits_idx = 0;
 		break;
 	}
-	// 고정된 길이의 2 값을 받기 위한 사용
-	if(digits_idx == 2)
-	{
-		value = digits2[0] * 10 + digits2[1];
-		digits_idx = 0;
 
-		if(value > 0 && value < MAX_HEIGHT)
+	if(digits1 > 0 && digits1 < MAX_HEIGTH)
+	{
+		if((right + 1)%QUEUE_SIZE != left)
 		{
-			if((right + 1)%QUEUE_SIZE != left)
+			int c = check_duplication(digits1);
+			if(c>=0)cancel_floor(c);
+			else
 			{
-				int c = check_duplication(value);
-				if(c>=0)cancel_floor(c);
-				else
-				{
-					unsigned int i = (right + 1)%QUEUE_SIZE;
-					queue[i] = value;
-					set_7seg_char(3, 'N');
-					set_7seg_char(2, '=');
-					set_7seg_num(1, value/10);
-					set_7seg_num(0, value%10);
-				}
+				unsigned int i = (right + 1)%QUEUE_SIZE;
+				queue[i] = digits1;
+				set_7seg_char(3, 'N');
+				set_7seg_char(2, '=');
+				set_7seg_num(1, digits1/10);
+				set_7seg_num(0, digits1%10);
 			}
-			else // 배열이 꽉 차서 값이 못 들어간다
+		}
+		else // 배열이 꽉 차서 값이 못 들어간다
+		{
+			int c = check_duplication(digits1);
+			if(c>=0)cancel_floor(c);
+			else
 			{
-				int c = check_duplication(value);
-				if(c>=0)cancel_floor(c);
-				else
-				{
-					set_7seg_char(3, 'F');
-					set_7seg_char(2, 'U');
-					set_7seg_char(1, 'L');
-					set_7seg_char(0, 'L');
-				}
+				set_7seg_char(3, 'F');
+				set_7seg_char(2, 'U');
+				set_7seg_char(1, 'L');
+				set_7seg_char(0, 'L');
 			}
 		}
 	}
-	// 숫자 말고 다른 문자열을 넣을 수 있는 경우의 if문
-	// 고정된 입력이 아니어도 입력을 받을 수 있다.
-	// if(value > 0 && value < MAX_HEIGHT)
-	// {
-	//     if((right + 1)%QUEUE_SIZE != left)
-	//     {
-	//         current_floor[(right+1)%QUEUE_SIZE] = value;
-	//         set_7seg_char(3, 'N');
-	//         set_7seg_char(2, '=');
-	//         set_7seg_int(1, value/10);
-	//         set_7seg_int(0, value%10);
-	//     }
-	//     else // 배열이 꽉 차서 값이 못 들어간다
-	//     {
-	//         set_7seg_char(3, 'F');
-	//         set_7seg_char(2, 'U');
-	//         set_7seg_char(1, 'L');
-	//         set_7seg_char(0, 'L');
-	//     }
-	// }
 }
 
 int main()
@@ -405,10 +277,103 @@ int main()
 	init(); // init_ 을 모은 함수
 	while(1)
 	{
-		sei();
 		// 조도 센서를 통한 LED 제어
 		set_ADCLED();
 		OCR2 = duty;
+		   // 움직이는 상태
+		if(is_move)
+		{
+			cli();
+			// 층 변화에 따른 변화 check
+			if(is_up) // current_floor < object_floor // 정회전
+			{
+				PORTB = 0x80;
+				// 1층 이동
+				if(object_floor - current_floor > diff_floor/2)
+				{
+					current_floor += velocity;
+					velocity += 10;
+				}
+				else if(object_floor - current_floor== 0)
+				{
+					current_floor = object_floor;
+					velocity = 0;
+					is_move = 0;
+				}
+				else
+				{
+					current_floor += velocity;
+					if(velocity <= 10)velocity = 10;
+					velocity -= 10;
+					if(object_floor-current_floor < 100)
+					{
+					int floor = object_floor/DISTANCE_PER_FLOOR;
+					set_7seg_char(3, '=');
+					set_7seg_char(2, '>');
+					set_7seg_num(1, floor/10);
+					set_7seg_char(0, floor%10);
+					}
+				}
+			}else // object_floor > current_floor // 역회전
+			{
+				PORTB = 0x40;
+				// 1층 이동
+				if(current_floor - object_floor > diff_floor/2)
+				{
+					current_floor -= velocity;
+					velocity += 10;
+				}
+				else if(current_floor - object_floor == 0)
+				{
+					current_floor = object_floor;
+					velocity = 0;
+					is_move = 0;
+				}
+				else
+				{
+					current_floor -= velocity;
+					if(velocity <= 10)velocity = 10;
+					velocity -= 10;
+					if(current_floor-object_floor < 100)
+					{
+					int floor = object_floor/DISTANCE_PER_FLOOR;
+					set_7seg_char(3, '=');
+					set_7seg_char(2, '>');
+					set_7seg_num(1, floor/10);
+					set_7seg_char(0, floor%10);
+					}
+				}
+			}
+			OCR2 = velocity;
+		}
+		else // 멈춰있는 상태
+		{
+			PORTB = 0;
+			// is_open이 아니고 1초가 지나면 is_move
+			sei();
+
+			if(!has_open)
+			{
+				is_open = 1;
+				has_open = 0;
+				set_7seg_char(3, 'O');
+				set_7seg_char(2, 'P');
+				set_7seg_char(1, 'E');
+				set_7seg_char(0, 'N');
+			}
+
+			if(!is_open)
+			{
+				// 다음 행선지를 정한다.
+				if(left != right)
+				{
+					object_floor = queue[left] * DISTANCE_PER_FLOOR;
+					left = (left + 1) % QUEUE_SIZE;
+					has_open = 0;
+					is_move = 1;
+				}
+			}
+		}
 	}
 	return 0;
 }
@@ -445,7 +410,7 @@ unsigned short read_adc()
 	while((ADCSRA&0x10)!=0x10);//ADC 변환 완료 검사
 	adc_low = ADCL;      // 변환된 Low값 읽어오기
 	adc_high = ADCH;   // 변환된 High값 읽어오기
-	value = (adc_high << 8)|adc_low;
+	value = (adc_high << 8) | adc_low;
 	// value는 High 및 Low 연결 16비트값
 	return value;
 }
