@@ -114,7 +114,7 @@ void init_PWM()
 // 7. MOTOR setting =>
 void init_MOTOR()
 {
-	DDRB = 0x0A;
+	DDRB |= (1<<DDB7);
 }
 
 void init()
@@ -262,6 +262,7 @@ ISR(TIMER2_COMP_vect)
 	}
 	else // 멈춰있는 상태
 	{
+		PORTB = 0;
 		// is_open이 아니고 1초가 지나면 is_move
 		sei();
 
