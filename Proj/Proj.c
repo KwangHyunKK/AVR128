@@ -201,6 +201,7 @@ ISR(TIMER2_COMP_vect)
 		// 층 변화에 따른 변화 check
 		if(is_up) // current_floor < object_floor // 정회전
 		{
+            PORTB = 0x80;
 			// 1층 이동
 			if(object_floor - current_floor > diff_floor/2)
 			{
@@ -227,10 +228,9 @@ ISR(TIMER2_COMP_vect)
 					set_7seg_char(0, floor%10);
 				}
 			}
-
-			OCR2 = velocity;
 		}else // object_floor > current_floor // 역회전
 		{
+            PORTB = 0x40;
 			// 1층 이동
 			if(current_floor - object_floor > diff_floor/2)
 			{
@@ -257,8 +257,8 @@ ISR(TIMER2_COMP_vect)
 					set_7seg_char(0, floor%10);
 				}
 			}
-			OCR2 = 255 - velocity;
 		}
+        OCR2 = velocity;
 	}
 	else // 멈춰있는 상태
 	{
