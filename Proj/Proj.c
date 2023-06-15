@@ -107,6 +107,14 @@ void init_PWM()
 	OCR2 = duty;
 }
 
+void init()
+{
+    init_7seg();
+    init_ADC();
+    init_bluetooth();
+    init_button();
+    init_PWM();
+}
 // 인터럽트
 ISR(INT4_vect)
 {
